@@ -52,9 +52,10 @@ public:
 	void ParseExplosionTables();
 	void ReloadGenerators(const std::string&);
 
-	unsigned int LoadCustomGeneratorID(const char* tag) { return (LoadGeneratorID(tag, CEG_PREFIX_STRING)); }
-	unsigned int LoadGeneratorID(const char* tag, const char* pre = "");
-
+	unsigned int LoadCustomGeneratorID(const char* tag, bool with_alloc = true) { return (LoadGeneratorID(tag, CEG_PREFIX_STRING, with_alloc)); }
+	unsigned int LoadGeneratorID(const char* tag, const char* pre = "", bool with_alloc = true);
+	
+	IExplosionGenerator* FindExistingGenerator(const char* tag, const char* pre = "");
 	IExplosionGenerator* LoadGenerator(const char* tag, const char* pre = "");
 	IExplosionGenerator* GetGenerator(unsigned int expGenID);
 
@@ -84,6 +85,7 @@ protected:
 
 	spring::unordered_map<unsigned int, unsigned int> expGenHashIdentMap; // hash->id
 	spring::unordered_map<unsigned int, std::array<char, 64>> expGenIdentNameMap; // id->name
+	std::array<char, 64> AssembleGeneratorKey(const char* tag, const char* pre = "");
 };
 
 

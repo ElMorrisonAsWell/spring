@@ -274,17 +274,66 @@ void CExplosionGeneratorHandler::ReloadGenerators(const std::string& tag) {
 	}
 }
 
-
-
-unsigned int CExplosionGeneratorHandler::LoadGeneratorID(const char* tag, const char* pre)
+/**
+ * @brief Load a generator by looking one up using a provided key. If it does not exist, optionally allocate one. 
+ * 
+ * This method uses a tag and prefix to look up a ExplosionGenerator and return it. If #with_alloc is set to true,
+ * allocate a new one if it does not already exist for the given key. Otherwise, return #EXPGEN_ID_INVALID when no generator could be found.
+ * 
+ * @param tag key tag
+ * @param pre Optional key prefix. Default: "" 
+ * @param with_alloc Determine wether a new ExplosionGenerator should be allocated in case it does not exist for the given key. Default: true
+ * @return ExplosionGenerator Id or #EXPGEN_ID_INVALID, in case no generator was found and none should/could be allocated
+ */
+unsigned int CExplosionGeneratorHandler::LoadGeneratorID(const char* tag, const char* pre, bool with_alloc)
 {
 	RECOIL_DETAILED_TRACY_ZONE;
-	IExplosionGenerator* eg = LoadGenerator(tag, pre);
-
+	IExplosionGenerator* eg = nullptr;
+	if(with_alloc) {
+		eg = LoadGenerator(tag, pre);
+	} else {
+		eg = FindExistingGenerator(tag, pre);
+	}
 	if (eg == nullptr)
 		return EXPGEN_ID_INVALID;
 
 	return (eg->GetGeneratorID());
+}
+
+/**
+ * @brief  Generate a key using a given tag and prefix
+ * 
+ * This key is used to look up ExplosionGenerators in this class' hashmap.
+ * @return ExplosionGenerator key in form of char array with a length of 64. 
+ */
+std::array<char, 64> CExplosionGeneratorHandler::AssembleGeneratorKey(const char* tag, const char* pre)
+{
+	std::array<char, 64> key = {{0}};
+
+	char* ptr = key.data();
+
+	ptr += snprintf(ptr, sizeof(key) - (ptr - key.data()), "%s", pre);
+	ptr += snprintf(ptr, sizeof(key) - (ptr - key.data()), "%s", tag);
+	return key;
+}
+
+/**
+ * @brief  Locate an existing ExplosionGenerator for a given tag and prefix
+ * 
+ * This method uses a tag and prefix to assemble a key that is used to look up a ExplosionGenerator and return it.
+ * If the map of generators does not contain a generator for this key, nullptr is returned. 
+ * 
+ * @return Pointer to a valid IExplosionGenerator or nullptr
+ */
+IExplosionGenerator* CExplosionGeneratorHandler::FindExistingGenerator(const char* tag, const char* pre) 
+{
+	auto key = AssembleGeneratorKey(tag, pre);
+	const auto hash = hashString(key.data());
+	const auto iter = expGenHashIdentMap.find(hash);
+
+	if (iter != expGenHashIdentMap.end())
+		return explosionGenerators[iter->second];
+	return nullptr;
 }
 
 // creates either a standard or a custom explosion generator instance
@@ -294,26 +343,16 @@ unsigned int CExplosionGeneratorHandler::LoadGeneratorID(const char* tag, const 
 //   must NOT be overwritten
 IExplosionGenerator* CExplosionGeneratorHandler::LoadGenerator(const char* tag, const char* pre)
 {
-	decltype(expGenIdentNameMap)::mapped_type key = {{0}};
-
-	char* ptr = key.data();
-	char* sep = nullptr;
-
-	ptr += snprintf(ptr, sizeof(key) - (ptr - key.data()), "%s", pre);
-	ptr += snprintf(ptr, sizeof(key) - (ptr - key.data()), "%s", tag);
-
-	const auto hash = hashString(key.data());
-	const auto iter = expGenHashIdentMap.find(hash);
-
-	if (iter != expGenHashIdentMap.end())
-		return explosionGenerators[iter->second];
-
 	// tag is either "CStdExplosionGenerator" (or some sub-string, eg.
 	// "std") which maps to CStdExplosionGenerator or "custom:postfix"
 	// which maps to CCustomExplosionGenerator, all others cause NULL
 	// to be returned
-	IExplosionGenerator* explGen = nullptr;
-
+	IExplosionGenerator* explGen = FindExistingGenerator(tag, pre);
+	if(explGen) {
+		return explGen;
+	}
+	auto key = AssembleGeneratorKey(tag, pre);
+	char* sep = nullptr;
 	if ((sep = strstr(key.data(), ":")) != nullptr) {
 		// grab the "custom" prefix (the only supported value)
 		explGen = egMemPool.alloc<CCustomExplosionGenerator>();
@@ -328,7 +367,7 @@ IExplosionGenerator* CExplosionGeneratorHandler::LoadGenerator(const char* tag, 
 
 	// save generator so ID is valid *before* possible recursion
 	explosionGenerators.push_back(explGen);
-
+	const auto hash = hashString(key.data());
 	if (sep != nullptr) {
 		// standard EG's have no postfix (nor always a prefix)
 		// custom EG's always have CEG_PREFIX_STRING in front

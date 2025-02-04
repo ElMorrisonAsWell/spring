@@ -5803,7 +5803,7 @@ int LuaSyncedRead::GetUnitDefDimensions(lua_State* L)
  */
 int LuaSyncedRead::GetCEGID(lua_State* L)
 {
-	lua_pushnumber(L, explGenHandler.LoadCustomGeneratorID(luaL_checkstring(L, 1)));
+	lua_pushnumber(L, explGenHandler.LoadCustomGeneratorID(luaL_checkstring(L, 1), false));
 	return 1;
 }
 
